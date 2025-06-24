@@ -250,6 +250,7 @@
         let currentGameId = null;
         let gameUnsubscribe = null;
         let countdownUnsubscribe = null;
+        let countdownInterval = null;
         let gameData = {};
         let isAuthReady = false;
 
@@ -376,6 +377,10 @@
                 return;
             }
 
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
             if (gameUnsubscribe) gameUnsubscribe();
             if (countdownUnsubscribe) countdownUnsubscribe();
 
@@ -497,29 +502,37 @@
 
 
         // --- Observador para o Início da Corrida ---
-        let countdownInterval = null;
         function startCountdownObserver(gameId) {
             if(!gameId) return;
             const gameRef = doc(db, 'races', gameId);
             countdownUnsubscribe = onSnapshot(gameRef, (docSnap) => {
-                if (!docSnap.exists()) return;
+                if (!docSnap.exists() || countdownInterval) return;
+                
                 const data = docSnap.data();
                 const players = data.players || {};
                 const allReady = Object.values(players).length > 1 && Object.values(players).every(p => p.isReady);
                 
-                if (allReady && data.status === 'waiting' && !countdownInterval) {
+                if (allReady && data.status === 'waiting') {
                     let count = 5;
+                    countdownSpan.textContent = `${count}...`; // Mostra o 5 inicial
+                    
                     countdownInterval = setInterval(async () => {
-                        countdownSpan.textContent = `${count}...`;
-                        if (count <= 0) {
+                        count--;
+                        if (count > 0) {
+                            countdownSpan.textContent = `${count}...`;
+                        } else {
+                            countdownSpan.textContent = 'VAI!';
                             clearInterval(countdownInterval);
                             countdownInterval = null;
+                            
                             const hostId = Object.keys(players)[0];
                             if (hostId === currentUser.uid) {
-                                await updateDoc(gameRef, { status: 'racing' });
+                                // Pequeno atraso para garantir que todos vêem o "VAI!"
+                                setTimeout(async () => {
+                                    await updateDoc(gameRef, { status: 'racing' });
+                                }, 400);
                             }
                         }
-                        count--;
                     }, 1000);
                 }
             });
