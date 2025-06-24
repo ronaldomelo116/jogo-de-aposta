@@ -129,13 +129,14 @@
                 <p class="mb-2">Seu ID de Jogador: <span id="player-id" class="font-bold text-green-400"></span></p>
                 <div class="grid md:grid-cols-2 gap-4">
                     <div>
-                        <h2 class="text-xl mb-2 text-blue-400">Criar Novo Jogo</h2>
+                        <h2 class="text-xl mb-2 text-blue-400">Criar Jogo com Senha</h2>
+                        <input type="text" id="create-game-password-input" placeholder="Crie uma senha para a sala" class="nes-input mb-2">
                         <button id="create-game-btn" class="nes-btn w-full">Criar Jogo</button>
                     </div>
                     <div>
-                        <h2 class="text-xl mb-2 text-blue-400">Entrar em Jogo Existente</h2>
-                        <input type="text" id="game-id-input" placeholder="Cole o ID do Jogo aqui" class="nes-input mb-2">
-                        <button id="join-game-btn" class="nes-btn w-full">Entrar no Jogo</button>
+                        <h2 class="text-xl mb-2 text-blue-400">Entrar com Senha</h2>
+                        <input type="text" id="join-game-password-input" placeholder="Digite a senha da sala" class="nes-input mb-2">
+                        <button id="join-game-btn" class="nes-btn w-full">Entrar</button>
                     </div>
                 </div>
             </div>
@@ -143,8 +144,8 @@
 
         <div id="game-room" class="hidden nes-container">
             <h1 class="text-2xl text-center mb-4 text-yellow-400">Sala do Jogo</h1>
-            <p class="text-center mb-2">ID do Jogo: <strong id="game-id-display" class="text-green-400 cursor-pointer" title="Clique para copiar"></strong></p>
-            <p class="text-center mb-6">Compartilhe este ID com seus amigos!</p>
+            <p class="text-center mb-2">Senha da Sala: <strong id="game-id-display" class="text-green-400 cursor-pointer" title="Clique para copiar"></strong></p>
+            <p class="text-center mb-6">Partilhe esta senha com os seus amigos!</p>
             
             <div id="players-list" class="mb-6">
                 <!-- Lista de jogadores será preenchida dinamicamente -->
@@ -227,8 +228,9 @@
         const gameRoomDiv = document.getElementById('game-room');
         const playerIdSpan = document.getElementById('player-id');
         const createGameBtn = document.getElementById('create-game-btn');
+        const createGamePasswordInput = document.getElementById('create-game-password-input');
         const joinGameBtn = document.getElementById('join-game-btn');
-        const gameIdInput = document.getElementById('game-id-input');
+        const joinGamePasswordInput = document.getElementById('join-game-password-input');
         const gameIdDisplay = document.getElementById('game-id-display');
         const playersListDiv = document.getElementById('players-list');
         const readyBtn = document.getElementById('ready-btn');
@@ -347,9 +349,19 @@
         
         // --- Lógica do Jogo ---
 
-        async function createGame() {
-            if(!isAuthReady) return;
-            const gameId = `g_${Math.random().toString(36).substr(2, 9)}`;
+        async function createGame(gameId) {
+            if(!isAuthReady || !gameId) {
+                showMessage("Por favor, crie uma senha para a sala.");
+                return;
+            };
+
+            const gameRef = doc(db, 'races', gameId);
+            const docSnap = await getDoc(gameRef);
+
+            if (docSnap.exists()) {
+                showMessage("Esta senha já está em uso. Por favor, escolha outra.");
+                return;
+            }
             
             const initialPlayerData = {
                 [currentUser.uid]: {
@@ -360,7 +372,6 @@
                 }
             };
             
-            const gameRef = doc(db, 'races', gameId);
             await setDoc(gameRef, {
                 players: initialPlayerData,
                 status: 'waiting',
@@ -373,7 +384,7 @@
 
         function joinGame(gameId) {
             if (!gameId || !isAuthReady) {
-                showMessage("Por favor, autentique-se e insira um ID de Jogo válido.");
+                showMessage("Por favor, autentique-se e insira uma senha de sala válida.");
                 return;
             }
 
@@ -407,7 +418,7 @@
                         updateUI();
                     }
                 } else {
-                    showMessage("Jogo não encontrado!");
+                    showMessage("Jogo com esta senha não encontrado!");
                     currentGameId = null;
                 }
             });
@@ -466,8 +477,24 @@
         
         // --- Event Listeners ---
 
-        createGameBtn.addEventListener('click', createGame);
-        joinGameBtn.addEventListener('click', () => joinGame(gameIdInput.value.trim()));
+        createGameBtn.addEventListener('click', () => {
+            const password = createGamePasswordInput.value.trim();
+            if (password) {
+                createGame(password);
+            } else {
+                showMessage("Por favor, crie uma senha para a sala.");
+            }
+        });
+
+        joinGameBtn.addEventListener('click', () => {
+            const password = joinGamePasswordInput.value.trim();
+            if (password) {
+                joinGame(password);
+            } else {
+                showMessage("Por favor, digite a senha da sala para entrar.");
+            }
+        });
+
         readyBtn.addEventListener('click', setReady);
 
         function copyGameIdToClipboard() {
@@ -475,8 +502,8 @@
 
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(currentGameId)
-                    .then(() => showMessage('ID do Jogo copiado!'))
-                    .catch(() => showMessage('Erro ao copiar ID.'));
+                    .then(() => showMessage('Senha da sala copiada!'))
+                    .catch(() => showMessage('Erro ao copiar a senha.'));
             } else {
                 const textArea = document.createElement('textarea');
                 textArea.value = currentGameId;
@@ -488,9 +515,9 @@
                 textArea.select();
                 try {
                     document.execCommand('copy');
-                    showMessage('ID do Jogo copiado!');
+                    showMessage('Senha da sala copiada!');
                 } catch (err) {
-                    showMessage('Erro ao copiar ID.');
+                    showMessage('Erro ao copiar a senha.');
                 }
                 document.body.removeChild(textArea);
             }
