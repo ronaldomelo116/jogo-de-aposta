@@ -106,6 +106,17 @@
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
             font-size: 24px;
         }
+        /* Botão para acelerar em dispositivos móveis */
+        #mobile-space-btn {
+            position: fixed;
+            bottom: 20px;
+            left: 10%;
+            right: 10%;
+            width: 80%;
+            padding: 20px;
+            font-size: 20px;
+            z-index: 100;
+        }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen">
@@ -152,7 +163,7 @@
 
             <div id="race-area" class="hidden mt-8">
                 <h2 class="text-2xl text-center mb-4 text-red-500">CORRIDA!</h2>
-                <p class="text-center mb-6">Pressione a tecla <strong class="text-yellow-400">[ESPAÇO]</strong> o mais rápido que puder!</p>
+                <p class="text-center mb-6">Pressione a tecla <strong class="text-yellow-400">[ESPAÇO]</strong> ou o botão abaixo!</p>
                 <div id="race-tracks">
                     <!-- Pistas de corrida serão preenchidas dinamicamente -->
                 </div>
@@ -161,6 +172,8 @@
         </div>
     </div>
     
+    <button id="mobile-space-btn" class="nes-btn hidden bg-red-600 hover:bg-red-700">ACELERAR!</button>
+
     <div id="message-box" class="hidden">
         <p id="message-text"></p>
         <button id="close-message-btn" class="nes-btn mt-6">Ok</button>
@@ -229,6 +242,7 @@
         const messageBox = document.getElementById('message-box');
         const messageText = document.getElementById('message-text');
         const closeMessageBtn = document.getElementById('close-message-btn');
+        const mobileSpaceBtn = document.getElementById('mobile-space-btn');
 
 
         // Estado do Jogo
@@ -281,14 +295,16 @@
                 playerIndex++;
             }
 
-            // Atualiza área da corrida
+            // Atualiza área da corrida e botão mobile
             if (gameData.status === 'racing' || gameData.status === 'finished') {
                 bettingAreaDiv.classList.add('hidden');
                 waitingMessageDiv.classList.add('hidden');
                 raceAreaDiv.classList.remove('hidden');
+                mobileSpaceBtn.classList.toggle('hidden', gameData.status === 'finished');
                 updateRaceTracks();
             } else if (gameData.status === 'waiting') {
                 raceAreaDiv.classList.add('hidden');
+                mobileSpaceBtn.classList.add('hidden');
                 
                 const allReady = Object.values(gameData.players).length > 1 && Object.values(gameData.players).every(p => p.isReady);
 
@@ -303,6 +319,7 @@
             
              // Se o jogo acabou, mostra o vencedor
             if (gameData.status === 'finished' && gameData.winner) {
+                mobileSpaceBtn.classList.add('hidden'); // Garante que o botão desaparece
                 const winner = gameData.players[gameData.winner];
                 const totalPotWin = Object.values(gameData.players).reduce((sum, p) => sum + (p.bet || 0), 0);
                 showMessage(`${winner.name} venceu a corrida e levou $${totalPotWin}!`);
@@ -409,11 +426,10 @@
             });
         }
         
-        async function handleKeyPress(e) {
-            if (e.code !== 'Space' || !gameData || gameData.status !== 'racing' || gameData.winner) {
+        async function accelerate() {
+            if (!gameData || gameData.status !== 'racing' || gameData.winner) {
                 return;
             }
-            e.preventDefault();
 
             const player = gameData.players[currentUser.uid];
             let newPosition = player.position + 2.5; 
@@ -435,6 +451,13 @@
                 });
             }
         }
+
+        function handleKeyPress(e) {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                accelerate();
+            }
+        }
         
         // --- Event Listeners ---
 
@@ -442,42 +465,35 @@
         joinGameBtn.addEventListener('click', () => joinGame(gameIdInput.value.trim()));
         readyBtn.addEventListener('click', setReady);
 
-        // --- CORREÇÃO: Função de cópia robusta ---
         function copyGameIdToClipboard() {
             if (!currentGameId) return;
 
-            // Método moderno (preferencial)
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(currentGameId)
                     .then(() => showMessage('ID do Jogo copiado!'))
                     .catch(() => showMessage('Erro ao copiar ID.'));
             } else {
-                // Método de fallback (compatibilidade)
                 const textArea = document.createElement('textarea');
                 textArea.value = currentGameId;
-                
-                // Torna o textarea invisível
                 textArea.style.position = 'fixed';
                 textArea.style.left = '-9999px';
                 textArea.style.top = '-9999px';
-                
                 document.body.appendChild(textArea);
                 textArea.focus();
                 textArea.select();
-                
                 try {
                     document.execCommand('copy');
                     showMessage('ID do Jogo copiado!');
                 } catch (err) {
                     showMessage('Erro ao copiar ID.');
                 }
-                
                 document.body.removeChild(textArea);
             }
         }
 
         gameIdDisplay.addEventListener('click', copyGameIdToClipboard);
         document.addEventListener('keydown', handleKeyPress);
+        mobileSpaceBtn.addEventListener('click', accelerate);
 
 
         // --- Observador para o Início da Corrida ---
