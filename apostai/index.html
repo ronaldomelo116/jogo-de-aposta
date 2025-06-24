@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corrida de Apostas 2D Online</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background-color: #1a202c;
+            color: #a0aec0;
+            overflow: hidden;
+        }
+        .nes-btn {
+            position: relative;
+            display: inline-block;
+            padding: 12px 24px;
+            margin: 8px;
+            font-size: 16px;
+            color: white;
+            background-color: #2d3748;
+            border: 2px solid #4a5568;
+            border-radius: 8px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 4px #4a5568;
+        }
+        .nes-btn:hover {
+            background-color: #4a5568;
+            box-shadow: 0 2px #4a5568;
+            transform: translateY(2px);
+        }
+        .nes-btn:active {
+            box-shadow: 0 0 #4a5568;
+            transform: translateY(4px);
+        }
+        .nes-input {
+            background-color: #2d3748;
+            border: 2px solid #4a5568;
+            padding: 10px;
+            border-radius: 8px;
+            color: white;
+            width: 100%;
+        }
+        .nes-input:focus {
+            outline: none;
+            border-color: #63b3ed;
+        }
+        .nes-container {
+            border: 4px solid #4a5568;
+            padding: 2rem;
+            border-radius: 8px;
+            background-color: #2d3748;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+        .player-track {
+            position: relative;
+            height: 60px;
+            background-color: #4a5568;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border: 2px dashed #718096;
+            overflow: hidden;
+        }
+        .player-car {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 50px;
+            height: 30px;
+            border-radius: 4px;
+            transition: left 0.1s linear;
+            text-align: center;
+            font-size: 20px;
+            line-height: 30px;
+        }
+        .finish-line {
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 10px;
+            height: 100%;
+            background-image: repeating-linear-gradient(
+                0deg,
+                #fff,
+                #fff 10px,
+                #000 10px,
+                #000 20px
+            );
+        }
+        #message-box {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(45, 55, 72, 0.95);
+            color: white;
+            padding: 40px;
+            border-radius: 12px;
+            border: 4px solid #63b3ed;
+            text-align: center;
+            z-index: 1000;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            font-size: 24px;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+
+    <div id="app" class="w-full max-w-4xl mx-auto p-4">
+
+        <div id="lobby" class="nes-container">
+            <h1 class="text-3xl text-center mb-6 text-yellow-400">Corrida de Apostas Online</h1>
+            <div id="join-game">
+                <p class="mb-2">Seu ID de Jogador: <span id="player-id" class="font-bold text-green-400"></span></p>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <h2 class="text-xl mb-2 text-blue-400">Criar Novo Jogo</h2>
+                        <button id="create-game-btn" class="nes-btn w-full">Criar Jogo</button>
+                    </div>
+                    <div>
+                        <h2 class="text-xl mb-2 text-blue-400">Entrar em Jogo Existente</h2>
+                        <input type="text" id="game-id-input" placeholder="Cole o ID do Jogo aqui" class="nes-input mb-2">
+                        <button id="join-game-btn" class="nes-btn w-full">Entrar no Jogo</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="game-room" class="hidden nes-container">
+            <h1 class="text-2xl text-center mb-4 text-yellow-400">Sala do Jogo</h1>
+            <p class="text-center mb-2">ID do Jogo: <strong id="game-id-display" class="text-green-400 cursor-pointer" title="Clique para copiar"></strong></p>
+            <p class="text-center mb-6">Compartilhe este ID com seus amigos!</p>
+            
+            <div id="players-list" class="mb-6">
+                <!-- Lista de jogadores será preenchida dinamicamente -->
+            </div>
+
+            <div id="betting-area" class="text-center">
+                 <label for="bet-amount" class="block mb-2">Sua Aposta:</label>
+                 <input type="number" id="bet-amount" class="nes-input max-w-xs mx-auto" value="10">
+                 <button id="ready-btn" class="nes-btn">Estou Pronto!</button>
+            </div>
+            
+            <div id="waiting-message" class="text-center mt-4 hidden">
+                <p>Aguardando outros jogadores ficarem prontos...</p>
+                <p>A corrida começará em <span id="countdown"></span></p>
+            </div>
+
+            <div id="race-area" class="hidden mt-8">
+                <h2 class="text-2xl text-center mb-4 text-red-500">CORRIDA!</h2>
+                <p class="text-center mb-6">Pressione a tecla <strong class="text-yellow-400">[ESPAÇO]</strong> o mais rápido que puder!</p>
+                <div id="race-tracks">
+                    <!-- Pistas de corrida serão preenchidas dinamicamente -->
+                </div>
+                 <p class="text-center mt-4 text-xl">Pote Total: <span id="total-pot" class="text-green-400">0</span></p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="message-box" class="hidden">
+        <p id="message-text"></p>
+        <button id="close-message-btn" class="nes-btn mt-6">Ok</button>
+    </div>
+
+    <script type="module">
+        // ##########################################################################
+        // ##### CORREÇÃO PARA O ERRO DE PERMISSÕES DO FIREBASE (Permissions Error) #####
+        // ##########################################################################
+        // O erro "Missing or insufficient permissions" acontece porque, por defeito,
+        // a sua base de dados Firestore está bloqueada.
+        //
+        // PARA CORRIGIR:
+        // 1. Vá ao seu projeto Firebase em https://console.firebase.google.com/
+        // 2. No menu à esquerda, vá a Build -> Firestore Database.
+        // 3. Clique no separador (tab) "Rules" (Regras) no topo.
+        // 4. Substitua o conteúdo existente pelas regras abaixo e clique em "Publish".
+        /*
+        
+        rules_version = '2';
+        service cloud.firestore {
+          match /databases/{database}/documents {
+            // Permite que qualquer utilizador autenticado (incluindo anónimo)
+            // leia e escreva documentos na coleção 'races'.
+            match /races/{raceId} {
+              allow read, write: if request.auth != null;
+            }
+          }
+        }
+
+        */
+        // ##########################################################################
+
+        // Importações do Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Configuração do Firebase fornecida pelo usuário
+        const firebaseConfig = {
+            apiKey: "AIzaSyDjinmzC3wWE46wGqDd7u5LoY7tLer0k9Q",
+            authDomain: "site-et-pizzaria.firebaseapp.com",
+            projectId: "site-et-pizzaria",
+            storageBucket: "site-et-pizzaria.firebasestorage.app",
+            messagingSenderId: "935726368686",
+            appId: "1:935726368686:web:37e480f76747597ba66a3f"
+        };
+
+        // Inicialização do Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Elementos da UI
+        const lobbyDiv = document.getElementById('lobby');
+        const gameRoomDiv = document.getElementById('game-room');
+        const playerIdSpan = document.getElementById('player-id');
+        const createGameBtn = document.getElementById('create-game-btn');
+        const joinGameBtn = document.getElementById('join-game-btn');
+        const gameIdInput = document.getElementById('game-id-input');
+        const gameIdDisplay = document.getElementById('game-id-display');
+        const playersListDiv = document.getElementById('players-list');
+        const readyBtn = document.getElementById('ready-btn');
+        const betAmountInput = document.getElementById('bet-amount');
+        const bettingAreaDiv = document.getElementById('betting-area');
+        const raceAreaDiv = document.getElementById('race-area');
+        const raceTracksDiv = document.getElementById('race-tracks');
+        const waitingMessageDiv = document.getElementById('waiting-message');
+        const countdownSpan = document.getElementById('countdown');
+        const totalPotSpan = document.getElementById('total-pot');
+        const messageBox = document.getElementById('message-box');
+        const messageText = document.getElementById('message-text');
+        const closeMessageBtn = document.getElementById('close-message-btn');
+
+
+        // Estado do Jogo
+        let currentUser = null;
+        let currentGameId = null;
+        let gameUnsubscribe = null;
+        let gameData = {};
+
+        // --- Funções de UI ---
+
+        function showMessage(msg) {
+            messageText.textContent = msg;
+            messageBox.classList.remove('hidden');
+        }
+
+        closeMessageBtn.addEventListener('click', () => {
+            messageBox.classList.add('hidden');
+        });
+
+        function updateUI() {
+            if (!gameData || !gameData.players) return;
+
+            // Atualiza pote total
+            const totalPot = Object.values(gameData.players).reduce((sum, p) => sum + (p.bet || 0), 0);
+            totalPotSpan.textContent = `$${totalPot}`;
+            
+            // Atualiza lista de jogadores
+            playersListDiv.innerHTML = '<h3>Jogadores na Sala:</h3>';
+            const playerColors = ['#f56565', '#48bb78', '#4299e1', '#ed8936', '#9f7aea'];
+            let playerIndex = 0;
+            for (const id in gameData.players) {
+                const player = gameData.players[id];
+                const color = player.color || playerColors[playerIndex % playerColors.length];
+                if (!player.color) { gameData.players[id].color = color; }
+
+                const playerDiv = document.createElement('div');
+                playerDiv.className = 'flex justify-between items-center p-2 rounded mb-2';
+                playerDiv.style.backgroundColor = player.isReady ? '#2f855a' : '#4a5568';
+                playerDiv.innerHTML = `
+                    <div class="flex items-center">
+                       <span class="w-4 h-4 rounded-full mr-3" style="background-color: ${color};"></span>
+                       <span>${player.name} ${id === currentUser.uid ? '(Você)' : ''}</span>
+                    </div>
+                    <span>Aposta: $${player.bet}</span>
+                    <span class="font-bold">${player.isReady ? 'PRONTO' : 'Aguardando...'}</span>
+                `;
+                playersListDiv.appendChild(playerDiv);
+                playerIndex++;
+            }
+
+            // Atualiza área da corrida
+            if (gameData.status === 'racing' || gameData.status === 'finished') {
+                bettingAreaDiv.classList.add('hidden');
+                waitingMessageDiv.classList.add('hidden');
+                raceAreaDiv.classList.remove('hidden');
+                updateRaceTracks();
+            } else if (gameData.status === 'waiting') {
+                raceAreaDiv.classList.add('hidden');
+                
+                // Verifica se todos estão prontos
+                const allReady = Object.values(gameData.players).every(p => p.isReady);
+                if (allReady && Object.keys(gameData.players).length > 1) {
+                    bettingAreaDiv.classList.add('hidden');
+                    waitingMessageDiv.classList.remove('hidden');
+                } else {
+                    bettingAreaDiv.classList.remove('hidden');
+                    waitingMessageDiv.classList.add('hidden');
+                }
+            }
+            
+             // Se o jogo acabou, mostra o vencedor
+            if (gameData.status === 'finished' && gameData.winner) {
+                const winner = gameData.players[gameData.winner];
+                const totalPotWin = Object.values(gameData.players).reduce((sum, p) => sum + (p.bet || 0), 0);
+                showMessage(`${winner.name} venceu a corrida e levou $${totalPotWin}!`);
+                document.removeEventListener('keydown', handleKeyPress);
+            }
+        }
+
+        function updateRaceTracks() {
+            raceTracksDiv.innerHTML = '';
+            for (const id in gameData.players) {
+                const player = gameData.players[id];
+                const trackContainer = document.createElement('div');
+                
+                trackContainer.innerHTML = `
+                    <p class="mb-1 text-sm">${player.name}</p>
+                    <div class="player-track">
+                        <div class="player-car" id="car-${id}" style="left: ${player.position}%; background-color: ${player.color};">🏎️</div>
+                        <div class="finish-line"></div>
+                    </div>
+                `;
+                raceTracksDiv.appendChild(trackContainer);
+            }
+        }
+        
+        // --- Lógica do Jogo ---
+
+        async function createGame() {
+            const gameId = `g_${Math.random().toString(36).substr(2, 9)}`;
+            currentGameId = gameId;
+            
+            const initialPlayerData = {
+                [currentUser.uid]: {
+                    name: `Jogador_${currentUser.uid.substr(0, 4)}`,
+                    bet: 0,
+                    isReady: false,
+                    position: 0,
+                }
+            };
+            
+            const gameRef = doc(db, 'races', gameId);
+            await setDoc(gameRef, {
+                players: initialPlayerData,
+                status: 'waiting', // waiting, racing, finished
+                winner: null,
+                createdAt: new Date(),
+            });
+
+            joinGame(gameId);
+        }
+
+        function joinGame(gameId) {
+            if (!gameId) {
+                showMessage("Por favor, insira um ID de Jogo.");
+                return;
+            }
+            currentGameId = gameId;
+            const gameRef = doc(db, 'races', gameId);
+
+            if (gameUnsubscribe) gameUnsubscribe();
+
+            gameUnsubscribe = onSnapshot(gameRef, async (docSnap) => {
+                if (docSnap.exists()) {
+                    const latestGameData = docSnap.data();
+                    
+                    // Apenas atualiza o estado se os dados mudaram
+                    if(JSON.stringify(gameData) === JSON.stringify(latestGameData)) return;
+
+                    gameData = latestGameData;
+
+                    // Se o jogador não está no jogo, adiciona
+                    if (!gameData.players[currentUser.uid] && gameData.status === 'waiting') {
+                        await updateDoc(gameRef, {
+                            [`players.${currentUser.uid}`]: {
+                                name: `Jogador_${currentUser.uid.substr(0, 4)}`,
+                                bet: 0,
+                                isReady: false,
+                                position: 0
+                            }
+                        });
+                    } else {
+                        lobbyDiv.classList.add('hidden');
+                        gameRoomDiv.classList.remove('hidden');
+                        gameIdDisplay.textContent = currentGameId;
+                        updateUI();
+                    }
+
+                } else {
+                    showMessage("Jogo não encontrado!");
+                    currentGameId = null;
+                }
+            });
+        }
+        
+        async function setReady() {
+            if(gameData.players[currentUser.uid].isReady) return;
+
+            const bet = parseInt(betAmountInput.value);
+            if (isNaN(bet) || bet <= 0) {
+                showMessage("Por favor, insira uma aposta válida.");
+                return;
+            }
+            
+            const gameRef = doc(db, 'races', currentGameId);
+            await updateDoc(gameRef, {
+                [`players.${currentUser.uid}.bet`]: bet,
+                [`players.${currentUser.uid}.isReady`]: true,
+            });
+
+        }
+        
+        async function handleKeyPress(e) {
+            if (e.code !== 'Space' || gameData.status !== 'racing' || gameData.winner) {
+                return;
+            }
+            e.preventDefault();
+
+            const player = gameData.players[currentUser.uid];
+            let newPosition = player.position + 2.5; // Aumenta a velocidade
+            
+            if (newPosition >= 100) {
+                newPosition = 100;
+                 // Apenas atualiza o vencedor se não houver um
+                const gameRef = doc(db, 'races', currentGameId);
+                const currentGameDoc = await getDoc(gameRef);
+                if (currentGameDoc.exists() && !currentGameDoc.data().winner) {
+                   await updateDoc(gameRef, {
+                        winner: currentUser.uid,
+                        status: 'finished',
+                        [`players.${currentUser.uid}.position`]: newPosition,
+                   });
+                }
+            } else {
+                await updateDoc(doc(db, 'races', currentGameId), {
+                    [`players.${currentUser.uid}.position`]: newPosition
+                });
+            }
+        }
+        
+        // --- Event Listeners ---
+
+        createGameBtn.addEventListener('click', createGame);
+        joinGameBtn.addEventListener('click', () => joinGame(gameIdInput.value.trim()));
+        readyBtn.addEventListener('click', setReady);
+        gameIdDisplay.addEventListener('click', () => {
+            navigator.clipboard.writeText(currentGameId)
+                .then(() => showMessage('ID do Jogo copiado!'))
+                .catch(err => showMessage('Erro ao copiar ID.'));
+        });
+        document.addEventListener('keydown', handleKeyPress);
+
+
+        // --- Autenticação e Inicialização ---
+
+        onAuthStateChanged(auth, user => {
+            if (user) {
+                currentUser = user;
+                playerIdSpan.textContent = user.uid;
+                
+                // Verifica se há um jogo na URL para entrar automaticamente
+                const urlParams = new URLSearchParams(window.location.search);
+                const gameIdFromUrl = urlParams.get('game');
+                if (gameIdFromUrl) {
+                    gameIdInput.value = gameIdFromUrl;
+                    joinGame(gameIdFromUrl);
+                }
+
+            } else {
+                signInAnonymously(auth).catch(error => {
+                    console.error("Erro na autenticação anônima", error);
+                    showMessage("Não foi possível conectar. Tente recarregar a página.");
+                });
+            }
+        });
+
+        // Observador para início da corrida
+        let countdownInterval = null;
+        onSnapshot(doc(db, 'races', "dummy-id-for-listener-init"), () => {}); // init
+        const observeGame = () => {
+            if (!currentGameId) return;
+            const gameRef = doc(db, 'races', currentGameId);
+            onSnapshot(gameRef, (docSnap) => {
+                if (!docSnap.exists()) return;
+                const data = docSnap.data();
+                const players = data.players || {};
+                const allReady = Object.values(players).length > 1 && Object.values(players).every(p => p.isReady);
+                
+                if (allReady && data.status === 'waiting' && !countdownInterval) {
+                    let count = 5;
+                    countdownInterval = setInterval(async () => {
+                        countdownSpan.textContent = `${count}...`;
+                        if (count <= 0) {
+                            clearInterval(countdownInterval);
+                            countdownInterval = null;
+                            // Apenas o "host" (primeiro jogador) atualiza o estado para evitar concorrência
+                            if (Object.keys(players)[0] === currentUser.uid) {
+                                await updateDoc(gameRef, { status: 'racing' });
+                            }
+                        }
+                        count--;
+                    }, 1000);
+                }
+            });
+        };
+
+        // Re-chama o observer quando o gameId muda
+        let oldGameId = null;
+        setInterval(() => {
+            if(currentGameId !== oldGameId) {
+                oldGameId = currentGameId;
+                observeGame();
+            }
+        }, 500);
+
+    </script>
+</body>
+</html>
