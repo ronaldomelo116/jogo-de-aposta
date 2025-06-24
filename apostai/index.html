@@ -126,7 +126,13 @@
         <div id="lobby" class="nes-container">
             <h1 class="text-3xl text-center mb-6 text-yellow-400">Corrida de Apostas Online</h1>
             <div id="join-game">
-                <p class="mb-2">Seu ID de Jogador: <span id="player-id" class="font-bold text-green-400"></span></p>
+                <p class="mb-2">Seu ID de Sessão: <span id="player-id" class="font-bold text-green-400"></span></p>
+                
+                <div class="mb-4">
+                    <label for="player-name-input" class="block mb-2 text-yellow-400">Seu Nome de Jogador:</label>
+                    <input type="text" id="player-name-input" placeholder="Digite seu nome aqui" class="nes-input">
+                </div>
+
                 <div class="grid md:grid-cols-2 gap-4">
                     <div>
                         <h2 class="text-xl mb-2 text-blue-400">Criar Jogo com Senha</h2>
@@ -227,6 +233,7 @@
         const lobbyDiv = document.getElementById('lobby');
         const gameRoomDiv = document.getElementById('game-room');
         const playerIdSpan = document.getElementById('player-id');
+        const playerNameInput = document.getElementById('player-name-input');
         const createGameBtn = document.getElementById('create-game-btn');
         const createGamePasswordInput = document.getElementById('create-game-password-input');
         const joinGameBtn = document.getElementById('join-game-btn');
@@ -349,7 +356,7 @@
         
         // --- Lógica do Jogo ---
 
-        async function createGame(gameId) {
+        async function createGame(gameId, playerName) {
             if(!isAuthReady || !gameId) {
                 showMessage("Por favor, crie uma senha para a sala.");
                 return;
@@ -365,7 +372,7 @@
             
             const initialPlayerData = {
                 [currentUser.uid]: {
-                    name: `Jogador_${currentUser.uid.substr(0, 4)}`,
+                    name: playerName,
                     bet: 0,
                     isReady: false,
                     position: 0,
@@ -379,12 +386,12 @@
                 createdAt: new Date(),
             });
 
-            joinGame(gameId);
+            joinGame(gameId, playerName);
         }
 
-        function joinGame(gameId) {
-            if (!gameId || !isAuthReady) {
-                showMessage("Por favor, autentique-se e insira uma senha de sala válida.");
+        function joinGame(gameId, playerName) {
+            if (!gameId || !playerName || !isAuthReady) {
+                showMessage("Por favor, insira o seu nome e uma senha de sala válida.");
                 return;
             }
 
@@ -405,7 +412,7 @@
                     if (!gameData.players[currentUser.uid] && gameData.status === 'waiting') {
                         await updateDoc(gameRef, {
                             [`players.${currentUser.uid}`]: {
-                                name: `Jogador_${currentUser.uid.substr(0, 4)}`,
+                                name: playerName,
                                 bet: 0,
                                 isReady: false,
                                 position: 0
@@ -478,21 +485,31 @@
         // --- Event Listeners ---
 
         createGameBtn.addEventListener('click', () => {
+            const playerName = playerNameInput.value.trim();
             const password = createGamePasswordInput.value.trim();
-            if (password) {
-                createGame(password);
-            } else {
-                showMessage("Por favor, crie uma senha para a sala.");
+            if (!playerName) {
+                showMessage("Por favor, insira o seu nome de jogador.");
+                return;
             }
+            if (!password) {
+                showMessage("Por favor, crie uma senha para a sala.");
+                return;
+            }
+            createGame(password, playerName);
         });
 
         joinGameBtn.addEventListener('click', () => {
+            const playerName = playerNameInput.value.trim();
             const password = joinGamePasswordInput.value.trim();
-            if (password) {
-                joinGame(password);
-            } else {
-                showMessage("Por favor, digite a senha da sala para entrar.");
+            if (!playerName) {
+                showMessage("Por favor, insira o seu nome de jogador.");
+                return;
             }
+            if (!password) {
+                showMessage("Por favor, digite a senha da sala para entrar.");
+                return;
+            }
+            joinGame(password, playerName);
         });
 
         readyBtn.addEventListener('click', setReady);
@@ -570,7 +587,7 @@
             if (user) {
                 currentUser = user;
                 isAuthReady = true;
-                playerIdSpan.textContent = user.uid;
+                playerIdSpan.textContent = user.uid.substr(0,8);
 
             } else {
                 signInAnonymously(auth).catch(error => {
