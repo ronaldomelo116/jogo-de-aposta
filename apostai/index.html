@@ -168,23 +168,18 @@
 
     <script type="module">
         // ##########################################################################
-        // ##### CORREÇÃO PARA O ERRO DE PERMISSÕES DO FIREBASE (Permissions Error) #####
+        // ##### NOTA SOBRE AS REGRAS DE SEGURANÇA DO FIREBASE (Permissions) #####
         // ##########################################################################
-        // O erro "Missing or insufficient permissions" acontece porque, por defeito,
-        // a sua base de dados Firestore está bloqueada.
+        // Para o jogo funcionar, certifique-se de que as suas regras do Firestore
+        // no painel do Firebase permitem a leitura e escrita por utilizadores
+        // autenticados.
         //
-        // PARA CORRIGIR:
-        // 1. Vá ao seu projeto Firebase em https://console.firebase.google.com/
-        // 2. No menu à esquerda, vá a Build -> Firestore Database.
-        // 3. Clique no separador (tab) "Rules" (Regras) no topo.
-        // 4. Substitua o conteúdo existente pelas regras abaixo e clique em "Publish".
+        // Exemplo de regras:
         /*
         
         rules_version = '2';
         service cloud.firestore {
           match /databases/{database}/documents {
-            // Permite que qualquer utilizador autenticado (incluindo anónimo)
-            // leia e escreva documentos na coleção 'races'.
             match /races/{raceId} {
               allow read, write: if request.auth != null;
             }
@@ -240,7 +235,9 @@
         let currentUser = null;
         let currentGameId = null;
         let gameUnsubscribe = null;
+        let countdownUnsubscribe = null;
         let gameData = {};
+        let isAuthReady = false;
 
         // --- Funções de UI ---
 
@@ -293,9 +290,9 @@
             } else if (gameData.status === 'waiting') {
                 raceAreaDiv.classList.add('hidden');
                 
-                // Verifica se todos estão prontos
-                const allReady = Object.values(gameData.players).every(p => p.isReady);
-                if (allReady && Object.keys(gameData.players).length > 1) {
+                const allReady = Object.values(gameData.players).length > 1 && Object.values(gameData.players).every(p => p.isReady);
+
+                if (allReady) {
                     bettingAreaDiv.classList.add('hidden');
                     waitingMessageDiv.classList.remove('hidden');
                 } else {
@@ -333,8 +330,8 @@
         // --- Lógica do Jogo ---
 
         async function createGame() {
+            if(!isAuthReady) return;
             const gameId = `g_${Math.random().toString(36).substr(2, 9)}`;
-            currentGameId = gameId;
             
             const initialPlayerData = {
                 [currentUser.uid]: {
@@ -348,7 +345,7 @@
             const gameRef = doc(db, 'races', gameId);
             await setDoc(gameRef, {
                 players: initialPlayerData,
-                status: 'waiting', // waiting, racing, finished
+                status: 'waiting',
                 winner: null,
                 createdAt: new Date(),
             });
@@ -357,25 +354,21 @@
         }
 
         function joinGame(gameId) {
-            if (!gameId) {
-                showMessage("Por favor, insira um ID de Jogo.");
+            if (!gameId || !isAuthReady) {
+                showMessage("Por favor, autentique-se e insira um ID de Jogo válido.");
                 return;
             }
+
+            if (gameUnsubscribe) gameUnsubscribe();
+            if (countdownUnsubscribe) countdownUnsubscribe();
+
             currentGameId = gameId;
             const gameRef = doc(db, 'races', gameId);
 
-            if (gameUnsubscribe) gameUnsubscribe();
-
             gameUnsubscribe = onSnapshot(gameRef, async (docSnap) => {
                 if (docSnap.exists()) {
-                    const latestGameData = docSnap.data();
+                    gameData = docSnap.data();
                     
-                    // Apenas atualiza o estado se os dados mudaram
-                    if(JSON.stringify(gameData) === JSON.stringify(latestGameData)) return;
-
-                    gameData = latestGameData;
-
-                    // Se o jogador não está no jogo, adiciona
                     if (!gameData.players[currentUser.uid] && gameData.status === 'waiting') {
                         await updateDoc(gameRef, {
                             [`players.${currentUser.uid}`]: {
@@ -391,16 +384,17 @@
                         gameIdDisplay.textContent = currentGameId;
                         updateUI();
                     }
-
                 } else {
                     showMessage("Jogo não encontrado!");
                     currentGameId = null;
                 }
             });
+            
+            startCountdownObserver(gameId);
         }
         
         async function setReady() {
-            if(gameData.players[currentUser.uid].isReady) return;
+            if(!currentGameId || gameData.players[currentUser.uid].isReady) return;
 
             const bet = parseInt(betAmountInput.value);
             if (isNaN(bet) || bet <= 0) {
@@ -413,21 +407,19 @@
                 [`players.${currentUser.uid}.bet`]: bet,
                 [`players.${currentUser.uid}.isReady`]: true,
             });
-
         }
         
         async function handleKeyPress(e) {
-            if (e.code !== 'Space' || gameData.status !== 'racing' || gameData.winner) {
+            if (e.code !== 'Space' || !gameData || gameData.status !== 'racing' || gameData.winner) {
                 return;
             }
             e.preventDefault();
 
             const player = gameData.players[currentUser.uid];
-            let newPosition = player.position + 2.5; // Aumenta a velocidade
+            let newPosition = player.position + 2.5; 
             
             if (newPosition >= 100) {
                 newPosition = 100;
-                 // Apenas atualiza o vencedor se não houver um
                 const gameRef = doc(db, 'races', currentGameId);
                 const currentGameDoc = await getDoc(gameRef);
                 if (currentGameDoc.exists() && !currentGameDoc.data().winner) {
@@ -449,44 +441,51 @@
         createGameBtn.addEventListener('click', createGame);
         joinGameBtn.addEventListener('click', () => joinGame(gameIdInput.value.trim()));
         readyBtn.addEventListener('click', setReady);
-        gameIdDisplay.addEventListener('click', () => {
-            navigator.clipboard.writeText(currentGameId)
-                .then(() => showMessage('ID do Jogo copiado!'))
-                .catch(err => showMessage('Erro ao copiar ID.'));
-        });
+
+        // --- CORREÇÃO: Função de cópia robusta ---
+        function copyGameIdToClipboard() {
+            if (!currentGameId) return;
+
+            // Método moderno (preferencial)
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(currentGameId)
+                    .then(() => showMessage('ID do Jogo copiado!'))
+                    .catch(() => showMessage('Erro ao copiar ID.'));
+            } else {
+                // Método de fallback (compatibilidade)
+                const textArea = document.createElement('textarea');
+                textArea.value = currentGameId;
+                
+                // Torna o textarea invisível
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-9999px';
+                textArea.style.top = '-9999px';
+                
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                
+                try {
+                    document.execCommand('copy');
+                    showMessage('ID do Jogo copiado!');
+                } catch (err) {
+                    showMessage('Erro ao copiar ID.');
+                }
+                
+                document.body.removeChild(textArea);
+            }
+        }
+
+        gameIdDisplay.addEventListener('click', copyGameIdToClipboard);
         document.addEventListener('keydown', handleKeyPress);
 
 
-        // --- Autenticação e Inicialização ---
-
-        onAuthStateChanged(auth, user => {
-            if (user) {
-                currentUser = user;
-                playerIdSpan.textContent = user.uid;
-                
-                // Verifica se há um jogo na URL para entrar automaticamente
-                const urlParams = new URLSearchParams(window.location.search);
-                const gameIdFromUrl = urlParams.get('game');
-                if (gameIdFromUrl) {
-                    gameIdInput.value = gameIdFromUrl;
-                    joinGame(gameIdFromUrl);
-                }
-
-            } else {
-                signInAnonymously(auth).catch(error => {
-                    console.error("Erro na autenticação anônima", error);
-                    showMessage("Não foi possível conectar. Tente recarregar a página.");
-                });
-            }
-        });
-
-        // Observador para início da corrida
+        // --- Observador para o Início da Corrida ---
         let countdownInterval = null;
-        onSnapshot(doc(db, 'races', "dummy-id-for-listener-init"), () => {}); // init
-        const observeGame = () => {
-            if (!currentGameId) return;
-            const gameRef = doc(db, 'races', currentGameId);
-            onSnapshot(gameRef, (docSnap) => {
+        function startCountdownObserver(gameId) {
+            if(!gameId) return;
+            const gameRef = doc(db, 'races', gameId);
+            countdownUnsubscribe = onSnapshot(gameRef, (docSnap) => {
                 if (!docSnap.exists()) return;
                 const data = docSnap.data();
                 const players = data.players || {};
@@ -499,8 +498,8 @@
                         if (count <= 0) {
                             clearInterval(countdownInterval);
                             countdownInterval = null;
-                            // Apenas o "host" (primeiro jogador) atualiza o estado para evitar concorrência
-                            if (Object.keys(players)[0] === currentUser.uid) {
+                            const hostId = Object.keys(players)[0];
+                            if (hostId === currentUser.uid) {
                                 await updateDoc(gameRef, { status: 'racing' });
                             }
                         }
@@ -508,16 +507,23 @@
                     }, 1000);
                 }
             });
-        };
+        }
 
-        // Re-chama o observer quando o gameId muda
-        let oldGameId = null;
-        setInterval(() => {
-            if(currentGameId !== oldGameId) {
-                oldGameId = currentGameId;
-                observeGame();
+        // --- Autenticação e Inicialização ---
+        onAuthStateChanged(auth, user => {
+            if (user) {
+                currentUser = user;
+                isAuthReady = true;
+                playerIdSpan.textContent = user.uid;
+
+            } else {
+                signInAnonymously(auth).catch(error => {
+                    console.error("Erro na autenticação anónima", error);
+                    isAuthReady = false;
+                    showMessage("Não foi possível conectar. Tente recarregar a página.");
+                });
             }
-        }, 500);
+        });
 
     </script>
 </body>
